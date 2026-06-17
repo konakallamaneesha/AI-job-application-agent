@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+
+internshala_profile/
+
+captured_data/
+
+.vscode/
+
+*.log

@@ -120,6 +120,17 @@ def search_internshala(query):
                 wait_until="domcontentloaded"
             )
 
+            print("URL:", page.url)
+            
+            # Wait for cards to load with timeout
+            try:
+                page.wait_for_selector(
+                    ".individual_internship",
+                    timeout=5000
+                )
+            except:
+                pass
+
         except Exception as e:
 
             print(
@@ -131,16 +142,50 @@ def search_internshala(query):
             return jobs
 
         page.wait_for_timeout(
-            5000
+            2000
         )
 
-        cards = page.locator(
-            ".individual_internship"
-        )
+        selector_candidates = [
+            ".individual_internship",
+            "[data-href*='/internship/']",
+            "a[href*='/internship/']"
+        ]
+
+        cards = None
+        selector_used = None
+
+        for selector in selector_candidates:
+
+            candidate = page.locator(selector)
+
+            if candidate.count() > 0:
+
+                cards = candidate
+                selector_used = selector
+
+                break
+
+        if cards is None:
+
+            print("Cards Found: 0")
+
+            browser.close()
+
+            return jobs
 
         count = min(
             cards.count(),
             10
+        )
+
+        print(
+            "Cards Found:",
+            cards.count()
+        )
+
+        print(
+            "Using selector:",
+            selector_used
         )
 
         print(
@@ -158,6 +203,12 @@ def search_internshala(query):
                 link = card.get_attribute(
                     "data-href"
                 )
+
+                if not link:
+
+                    link = card.get_attribute(
+                        "href"
+                    )
 
                 if link:
 

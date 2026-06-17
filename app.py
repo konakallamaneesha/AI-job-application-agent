@@ -1,7 +1,10 @@
 import streamlit as st
 import os
+import re
+import backend.auto_apply as auto_apply_mod
 from backend.auto_apply import (
-    auto_apply
+    auto_apply,
+    submit_application
 )
 from backend.location_extractor import (
     extract_location
@@ -430,15 +433,108 @@ if uploaded_file:
                     resume_path
                 )
 
-                if response["status"] == "questions_found":
+                st.session_state["job_url"] = job["url"]
+                st.session_state["resume_path"] = resume_path
+                st.session_state["questions"] = response.get("questions", [])
+
+                if response["status"] == "login_required":
+
+                    st.warning(
+                        "Please login in the opened browser and click Auto Apply again."
+                    )
+
+                elif response["status"] == "questions_found":
 
                     st.warning(
                         "Additional Questions Found"
                     )
 
+                    question_prefix = f"answers_{job['url']}"
+
                     for q in response["questions"]:
 
-                        st.write(q)
+                        key = (
+                            f"{question_prefix}_"
+                            f"{re.sub(r'[^a-zA-Z0-9]+', '_', q['label']).strip('_').lower()}"
+                        )
+
+                        if q["type"] == "textarea":
+
+                            st.text_area(
+                                q["label"],
+                                key=key,
+                                value=st.session_state.get(key, "")
+                            )
+
+                        elif q["type"] == "number":
+
+                            st.number_input(
+                                q["label"],
+                                key=key,
+                                value=st.session_state.get(key, 0),
+                                step=1
+                            )
+
+                        elif q["type"] == "select":
+
+                            options = q.get("options", [])
+
+                            st.selectbox(
+                                q["label"],
+                                options,
+                                key=key,
+                                index=0 if options else None
+                            )
+
+                        elif q["type"] == "radio":
+
+                            options = q.get("options", [])
+
+                            st.radio(
+                                q["label"],
+                                options,
+                                key=key,
+                                index=0 if options else None
+                            )
+
+                        elif q["type"] == "checkbox":
+
+                            st.checkbox(
+                                q["label"],
+                                key=key,
+                                value=st.session_state.get(key, False)
+                            )
+
+                        else:
+
+                            st.text_input(
+                                q["label"],
+                                key=key,
+                                value=st.session_state.get(key, "")
+                            )
+
+                    if st.button(
+                        "Submit Answers",
+                        key=f"submit_answers_{job['url']}"
+                    ):
+
+                        answers = {}
+
+                        for q in response["questions"]:
+
+                            key = (
+                                f"{question_prefix}_"
+                                f"{re.sub(r'[^a-zA-Z0-9]+', '_', q['label']).strip('_').lower()}"
+                            )
+
+                            answers[q["label"]] = st.session_state.get(key, "")
+
+                        response["status"] = "answers_ready"
+                        st.session_state[f"{question_prefix}_answers"] = answers
+                        st.session_state[f"{question_prefix}_ready"] = True
+
+                        st.success("Answers Saved Successfully")
+                        st.info("Answers are ready for the next step. Final submission will be implemented in Step 3.")
 
                 elif response["status"] == "ready_for_confirmation":
 
@@ -466,9 +562,38 @@ if uploaded_file:
                     key=f"confirm_{job['url']}"
                 ):
 
-                    st.success(
-                        "Application Submitted"
+                    question_prefix = f"answers_{st.session_state['job_url']}"
+                    answers = {}
+
+                    for question in st.session_state.get("questions", []):
+
+                        key = (
+                            f"{question_prefix}_"
+                            f"{re.sub(r'[^a-zA-Z0-9]+', '_', question['label']).strip('_').lower()}"
+                        )
+
+                        if key in st.session_state:
+
+                            answers[question["label"]] = st.session_state[key]
+
+                    submit_result = submit_application(
+                        st.session_state["job_url"],
+                        st.session_state["resume_path"],
+                        st.session_state.get("questions", []),
+                        answers
                     )
+
+                    if submit_result.get("status") == "submitted":
+
+                        st.success(
+                            "Application Submitted Successfully"
+                        )
+
+                    else:
+
+                        st.error(
+                            "Submission failed. Please try again."
+                        )
 
             with st.expander(
                 "View Required Skills"
